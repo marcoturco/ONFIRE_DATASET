@@ -108,6 +108,9 @@ plot(wrld_simpl, add = TRUE)
 image.plot(lon01, lat01, apply((BA), c(1, 2), mean, na.rm = TRUE))
 plot(wrld_simpl, add = TRUE)
 
+lon=lon01
+lat=lat01
+
 # export as RData
 save(BA, file = paste0(dir_out, "BA_",region,"_v1.RData"))
 save(lon, file = paste0(dir_out, "lon_BA_",region,"_v1.RData"))
