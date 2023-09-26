@@ -28,6 +28,7 @@ CRS.new <-
 
 # Load world limits
 data(wrld_simpl)
+proj4string(wrld_simpl) <- CRS.new
 
 # Load country limits
 cshp <-
@@ -40,6 +41,7 @@ proj4string(shp_ll) <- CRS.new
 # Define data directories
 dir_out = '/Users/marco/Dropbox/model/fire_database/out_def/'
 dir_obs <- "/Users/marco/Documents/dati/fire_climate_data/fire/"
+dir_mask <- "~/Dropbox/model/fire_database/source/"
 
 # Load fire data
 my_data <-
@@ -90,7 +92,7 @@ aux = shp_ll@bbox
 joint_reg=c(1,2,3,16,15,4,5,6,7,14,13,12,11,10,9,8)
 
 # Load grid
-fname <- file.path(dir_obs, 'land_sea_mask_1degree.nc4')
+fname <- file.path(dir_mask, 'land_sea_mask_1degree.nc4')
 obs.nc <- nc_open(fname)
 lon = obs.nc$dim$lon$vals 
 lat = obs.nc$dim$lat$vals
@@ -101,12 +103,22 @@ ilat = which(lat01 >= aux[2, 1] & lat01 <= aux[2, 2])
 lon01 = lon01[ilon]
 lat01 = lat01[ilat]
 # Create grid
-points <- expand.grid(lon01, lat01)
+# Create a 0.1º grid extent based on the original 1º grid
+x_min <- min(lon01)
+x_max <- max(lon01)
+y_min <- min(lat01)
+y_max <- max(lat01)
+# Define the desired resolution for the new 0.1º grid
+resolution <- 0.1
+# Create the 0.1º grid using the desired resolution
+lon001=seq(x_min, x_max, resolution)
+lat001=seq(y_min, y_max, resolution)
+points <- expand.grid(lon001, lat001)
 pts = SpatialPoints(points)
 proj4string(pts) <- CRS.new
 
 # Calculate BA for each grid cell
-BA = array(data = NA, dim = c(length(lon01), length(lat01), length(years) *
+BA = array(data = NA, dim = c(length(lon001), length(lat001), length(years) *
                                 12))
 
 for (ireg in 1:length(joint_reg)) {
@@ -116,7 +128,7 @@ for (ireg in 1:length(joint_reg)) {
                length(joint_reg)))
   ii <- !is.na(over(pts, shp_ll[ireg, ]))
   inout = ii[, 1]
-  dim(inout) <- c(length(lon01), length(lat01))
+  dim(inout) <- c(length(lon001), length(lat001))
   inout[inout == 0] = NA
   # image.plot(lon01, lat01, inout)
   # plot(shp_ll[ireg, ], add = TRUE)
@@ -124,8 +136,8 @@ for (ireg in 1:length(joint_reg)) {
   
   if (sum(inout, na.rm = TRUE) > 0) {
     print(ireg)
-    for (i in 1:length(lon01)) {
-      for (j in 1:length(lat01)) {
+    for (i in 1:length(lon001)) {
+      for (j in 1:length(lat001)) {
         if (!is.na(inout[i, j])) {
           BA[i, j , ] =
             (CHILE[,joint_reg[ireg]]/ sum(inout, na.rm = TRUE))
@@ -135,9 +147,58 @@ for (ireg in 1:length(joint_reg)) {
   }
 }
 
+
+
 # chech the dataset
 summary(as.vector(BA))
-image.plot(lon01, lat01, apply(log(BA+1), c(1, 2), mean, na.rm = TRUE))
+image.plot(lon001, lat001, apply(log(BA+1), c(1, 2), mean, na.rm = TRUE))
+plot(wrld_simpl, add = TRUE)
+
+# Calculate BA for each 1º grid cell
+BA2 = array(data = NA, dim = c(length(lon01), length(lat01), length(years) *
+                                12))
+for (k in 1:dim(BA)[3]) {
+  print(paste0('month ',k,' of ',dim(BA)[3]))
+  for (i in 1:length(lon01)) {
+    
+    for (j in 1:length(lat01)) {
+      idx1 = which(lon001 >= lon01[i] - 0.5 &
+                     lon001 <= lon01[i] + 0.5)
+      idx2 = which(lat001 >= lat01[j] - 0.5 &
+                     lat001 <= lat01[j] + 0.5)
+      
+      if (length(idx1) >= 1 & length(idx2) >= 1 & length(which(is.na(BA[idx1, idx2,k]))) < length(idx1)*length(idx2) ) {
+        BA2[i, j, k] = sum(BA[idx1, idx2,k],na.rm=T)
+      }
+    }
+  }
+}
+
+summary(as.vector(BA2))
+image.plot(lon01, lat01, apply(log(BA2+1), c(1, 2), mean, na.rm = TRUE))
+plot(wrld_simpl, add = TRUE)
+
+rm(BA)
+BA=BA2
+rm(BA2)
+lon=lon01
+lat=lat01
+
+## Find which points fall over land
+points <- expand.grid(lon, lat)
+pts = SpatialPoints(points)
+proj4string(pts) <- CRS.new
+ii <- !is.na(over(pts, wrld_simpl)$FIPS)
+inout = ii
+dim(inout) <- c(length(lon), length(lat))
+inout[inout == 0] = NA
+image.plot(lon, lat, inout)
+plot(wrld_simpl, add = TRUE)
+for (it in 1:dim(BA)[3]) {
+  BA[,,it]=BA[,,it]*inout
+}
+
+image.plot(lon, lat, apply(log(BA+1), c(1, 2), mean, na.rm = TRUE))
 plot(wrld_simpl, add = TRUE)
 
 lonmin=max(lon01)
@@ -173,6 +234,8 @@ BA=BA*10000
 #set entire period
 BA=BA[,,-(1:12)] #delete 1984 as it is not complete
 BA=BA[,,-((dim(BA)[3]-11):dim(BA)[3])] #delete 2022 as it is not complete
+
+
 
 # export as RData
 save(BA, file = paste0(dir_out, "BA_",region,"_v1.RData"))
@@ -229,9 +292,6 @@ ncatt_put(ncout, 0, "Date", date())
 # close the file, writing data to disk
 nc_close(ncout)
 
-## Export as geoTIFF
-BA <- brick(ncfname,  varname = "Monthly_Burned_Area")
-writeRaster(BA,paste0(substr(ncfname,1,nchar(ncfname)-3),'.tif'),options=c('TFW=YES'),overwrite=TRUE)
 
 # Save the data frame as a csv file
 df <- as.data.frame(BA, xy=T)
@@ -246,3 +306,4 @@ colnames(df)[3:dim(df)[2]] <- col_names
 colnames(df)[1] <- "lon"
 colnames(df)[2] <- "lat"
 write.csv(df, file = paste0(substr(ncfname,1,nchar(ncfname)-3),'.csv'), row.names = F)
+

@@ -142,7 +142,7 @@ image.plot(lon, lat, apply(log(BA+1), c(1, 2), mean, na.rm = TRUE))
 plot(shp_ll, add = TRUE)
 
 #from hectare to square meter
-BA=BA*10000
+BA=BA*4046.86
 
 # export as RData
 save(BA, file = paste0(dir_out, "BA_",region,"_v1.RData"))

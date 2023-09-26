@@ -52,6 +52,8 @@ anni=as.numeric(format(as.Date(mtbs$Ig_Date),"%Y"))
 mesi=as.numeric(format(as.Date(mtbs$Ig_Date),"%m"))
 aux = mtbs@bbox
 
+
+cc
 # Load grid
 fname <- file.path(dir$obs, 'land_sea_mask_1degree.nc4')
 obs.nc <- nc_open(fname)

@@ -55,6 +55,8 @@ mesi=as.numeric(as.character(mesi))
 mesi[mesi=="-999"]=NA
 # aux = mydata@bbox
 
+
+
 # Load grid
 fname <- file.path(dir_obs, 'land_sea_mask_1degree.nc4')
 obs.nc <- nc_open(fname)
